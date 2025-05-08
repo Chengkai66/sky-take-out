@@ -7,6 +7,12 @@ sky:
     username: root
     password: root
 
+  redis:
+    host: localhost
+    port: 6379
+    password: root
+    database: 0
+
   alioss:
     endpoint: oss-cn-beijing.aliyuncs.com
     access-key-id: LTAI5t8wyQ4GLfj7TDvNUXXc
