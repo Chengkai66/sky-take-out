@@ -1,8 +1,11 @@
 package com.sky.service.impl;
 
 import com.alibaba.fastjson.JSONObject;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
+import com.sky.dto.OrdersPageQueryDTO;
 import com.sky.dto.OrdersPaymentDTO;
 import com.sky.dto.OrdersSubmitDTO;
 import com.sky.entity.*;
@@ -10,10 +13,12 @@ import com.sky.exception.AddressBookBusinessException;
 import com.sky.exception.OrderBusinessException;
 import com.sky.exception.ShoppingCartBusinessException;
 import com.sky.mapper.*;
+import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderSubmitVO;
+import com.sky.vo.OrderVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -138,6 +143,83 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         orderMapper.update(orders);
+    }
+
+    @Override
+    public PageResult historyOrdersList(int pageNum, int pageSize, Integer status) {
+        // 开启分页查询
+        PageHelper.startPage(pageNum,pageSize);
+        Long userId = BaseContext.getCurrentId();
+        OrdersPageQueryDTO ordersPageQueryDTO = new OrdersPageQueryDTO();
+        ordersPageQueryDTO.setUserId(userId);
+        ordersPageQueryDTO.setStatus(status);
+
+        // 查询到order的分页结果
+        Page<Orders> page = orderMapper.pageQuery(ordersPageQueryDTO);
+
+        ArrayList<OrderVO> orderVOArrayList = new ArrayList<>();
+        if (page != null && page.getTotal() > 0) {
+            for (Orders order : page) {
+                Long orderId = order.getId();
+                OrderVO orderVO = new OrderVO();
+                BeanUtils.copyProperties(order, orderVO);
+                List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(orderId);
+                orderVO.setOrderDetailList(orderDetailList);
+                orderVOArrayList.add(orderVO);
+            }
+        }
+
+        return new  PageResult(page.getTotal(),orderVOArrayList);
+    }
+
+    @Transactional
+    @Override
+    public OrderVO getOrderDetailByOrderId(Long orderId) {
+        // 1.根据orderId,查询出orders表中的具体内容
+        Orders order = orderMapper.getById(orderId);
+        Long addressBookId = order.getAddressBookId();
+
+        AddressBook addressBook = addressBookMapper.getById(addressBookId);
+        String provinceName = addressBook.getProvinceName();
+        String cityName = addressBook.getCityName();
+        String districtName = addressBook.getDistrictName();
+        String detail = addressBook.getDetail();
+
+        order.setAddress(provinceName + "，" + cityName + "，" + districtName + "，" + detail);
+        // 用OrderVO进行封装
+        OrderVO orderVO = new OrderVO();
+
+        BeanUtils.copyProperties(order, orderVO);
+        // 2.根据orderId，查询出order_detail表中的所有内容
+        List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(order.getId());
+        orderVO.setOrderDetailList(orderDetailList);
+        return orderVO;
+    }
+
+    @Override
+    public void cancelOrder(Long orderId) {
+        // 将order表中的status字段设置为6
+        orderMapper.cancelSetStatus6(orderId);
+    }
+
+    @Override
+    @Transactional
+    public void repetition(Long orderId) {
+        // 再向购物车中加入相同的商品
+        // 根据orderId从order_detail表中查出具体的商品信息
+        Long userId = BaseContext.getCurrentId();
+        List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(orderId);
+        ArrayList<ShoppingCart> shoppingCarts = new ArrayList<>();
+        for (OrderDetail orderDetail : orderDetailList) {
+            ShoppingCart shoppingCart = new ShoppingCart();
+            BeanUtils.copyProperties(orderDetail, shoppingCart);
+            shoppingCart.setId(null);
+            shoppingCart.setUserId(userId);
+            shoppingCart.setCreateTime(LocalDateTime.now());
+            shoppingCarts.add(shoppingCart);
+        }
+        // 向shopping_cart表中插入n条商品数据
+        shoppingCartMapper.insertBatch(shoppingCarts);
     }
 
 }
