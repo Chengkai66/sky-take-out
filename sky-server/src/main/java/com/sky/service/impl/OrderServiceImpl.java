@@ -5,9 +5,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
-import com.sky.dto.OrdersPageQueryDTO;
-import com.sky.dto.OrdersPaymentDTO;
-import com.sky.dto.OrdersSubmitDTO;
+import com.sky.dto.*;
 import com.sky.entity.*;
 import com.sky.exception.AddressBookBusinessException;
 import com.sky.exception.OrderBusinessException;
@@ -17,6 +15,7 @@ import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
+import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
 import org.springframework.beans.BeanUtils;
@@ -66,7 +65,7 @@ public class OrderServiceImpl implements OrderService {
         BeanUtils.copyProperties(ordersSubmitDTO, orders);
 
         orders.setNumber(String.valueOf(System.currentTimeMillis()));
-        orders.setStatus(1);
+        orders.setStatus(2);
         orders.setUserId(userId);
         orders.setOrderTime(LocalDateTime.now());
         orders.setPayStatus(0);
@@ -95,6 +94,7 @@ public class OrderServiceImpl implements OrderService {
                 .build();
         return orderSubmitVO;
     }
+
     /**
      * 订单支付
      *
@@ -148,7 +148,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public PageResult historyOrdersList(int pageNum, int pageSize, Integer status) {
         // 开启分页查询
-        PageHelper.startPage(pageNum,pageSize);
+        PageHelper.startPage(pageNum, pageSize);
         Long userId = BaseContext.getCurrentId();
         OrdersPageQueryDTO ordersPageQueryDTO = new OrdersPageQueryDTO();
         ordersPageQueryDTO.setUserId(userId);
@@ -169,7 +169,7 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        return new  PageResult(page.getTotal(),orderVOArrayList);
+        return new PageResult(page.getTotal(), orderVOArrayList);
     }
 
     @Transactional
@@ -220,6 +220,95 @@ public class OrderServiceImpl implements OrderService {
         }
         // 向shopping_cart表中插入n条商品数据
         shoppingCartMapper.insertBatch(shoppingCarts);
+    }
+
+    /**
+     * 管理端订单搜索
+     *
+     * @param ordersPageQueryDTO
+     * @return
+     */
+    @Override
+    public PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
+        // 开启分页查询
+        PageHelper.startPage(ordersPageQueryDTO.getPage(), ordersPageQueryDTO.getPageSize());
+
+        // 查询到的orders表的分页结果
+        Page<Orders> orders = orderMapper.pageQuery(ordersPageQueryDTO);
+        ArrayList<OrderVO> orderVOArrayList = new ArrayList<>();
+        for (Orders order : orders) {
+            OrderVO orderVO = new OrderVO();
+            BeanUtils.copyProperties(order, orderVO);
+            // 设置orderVO中的address
+            AddressBook addressBook = addressBookMapper.getById(order.getAddressBookId());
+            orderVO.setAddress(addressBook.getProvinceName() + addressBook.getCityName() + addressBook.getDistrictName() + addressBook.getDetail());
+            // 设置orderVO里的orderDishes（订单菜品信息）
+            Long orderId = order.getId();
+            List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(orderId);
+            StringBuffer orderDishes = new StringBuffer();
+            for (OrderDetail orderDetail : orderDetailList) {
+                orderDishes.append(orderDetail.getName());
+            }
+            orderVO.setOrderDishes(orderDishes.toString());
+            orderVO.setOrderDetailList(orderDetailList);
+            orderVOArrayList.add(orderVO);
+        }
+        return new PageResult(orders.getTotal(), orderVOArrayList);
+    }
+
+    @Override
+    public OrderStatisticsVO statistics() {
+        OrderStatisticsVO orderStatisticsVO = new OrderStatisticsVO();
+        orderStatisticsVO.setToBeConfirmed(orderMapper.getStatistics(Orders.TO_BE_CONFIRMED));
+        orderStatisticsVO.setConfirmed(orderMapper.getStatistics(Orders.CONFIRMED));
+        orderStatisticsVO.setDeliveryInProgress(orderMapper.getStatistics(Orders.DELIVERY_IN_PROGRESS));
+        return orderStatisticsVO;
+    }
+
+    @Override
+    public void confirmOrder(OrdersConfirmDTO ordersConfirmDTO) {
+        ordersConfirmDTO.setStatus(3);
+        Orders orders = new Orders();
+        BeanUtils.copyProperties(ordersConfirmDTO, orders);
+        orderMapper.update(orders);
+    }
+
+    @Override
+    public void rejectionOrder(OrdersRejectionDTO ordersRejectionDTO) {
+        Orders orders = new Orders();
+        BeanUtils.copyProperties(ordersRejectionDTO, orders);
+        orders.setStatus(6);
+        orderMapper.update(orders);
+    }
+
+    /**
+     * 管理端取消订单
+     *
+     * @param ordersCancelDTO
+     */
+    @Override
+    public void cancel(OrdersCancelDTO ordersCancelDTO) {
+        Orders orders = new Orders();
+        BeanUtils.copyProperties(ordersCancelDTO, orders);
+        orders.setStatus(6);
+        orders.setCancelTime(LocalDateTime.now());
+        orderMapper.update(orders);
+    }
+
+    @Override
+    public void delivery(Long id) {
+        Orders orders = new Orders();
+        orders.setId(id);
+        orders.setStatus(4);
+        orderMapper.update(orders);
+    }
+
+    @Override
+    public void completeOrder(Long id) {
+        Orders orders = new Orders();
+        orders.setId(id);
+        orders.setStatus(5);
+        orderMapper.update(orders);
     }
 
 }

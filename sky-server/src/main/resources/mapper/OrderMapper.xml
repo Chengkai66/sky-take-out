@@ -53,6 +53,18 @@
             <if test="status != null">
                 and status = #{status}
             </if>
+            <if test="beginTime != null">
+                and begin_time = #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and end_time = #{endTime}
+            </if>
+            <if test="number != null">
+                and number = #{number}
+            </if>
+            <if test="phone != null">
+                and phone = #{phone}
+            </if>
         </where>
         order by order_time desc
     </select>

@@ -14,6 +14,7 @@ public interface OrderMapper {
 
     /**
      * 根据订单号查询订单
+     *
      * @param orderNumber
      */
     @Select("select * from orders where number = #{orderNumber}")
@@ -21,6 +22,7 @@ public interface OrderMapper {
 
     /**
      * 修改订单信息
+     *
      * @param orders
      */
     void update(Orders orders);
@@ -32,8 +34,15 @@ public interface OrderMapper {
 
     /**
      * 取消订单
+     *
      * @param orderId
      */
     @Update("update orders set status = 6 where id = #{orderId}")
     void cancelSetStatus6(Long orderId);
+
+    @Select("select count(*) from orders where status = #{status}")
+    Integer getStatistics(Integer status);
+
+    @Update("update orders set status = #{status} where id = #{id}")
+    void setStatus(Long id, Integer status);
 }
